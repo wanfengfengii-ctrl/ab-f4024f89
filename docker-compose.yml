@@ -1,0 +1,45 @@
+services:
+  # 纯前端静态站点：nginx 托管 Vite 产物，不含业务后端
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dual-axis-pulse-planner:latest
+    ports:
+      # 宿主机端口可配置：复制 .env.example 为 .env 后修改 HOST_PORT
+      - "${HOST_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # 浏览器验收服务：在容器内安装 Chromium 并执行 Playwright 端到端测试。
+  # 用法：
+  #   docker compose build
+  #   docker compose run --rm verify
+  # 也可针对已运行的站点：
+  #   BASE_URL=http://web:80 docker compose run --rm verify
+  verify:
+    image: mcr.microsoft.com/playwright:v1.48.0-noble
+    working_dir: /app
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      # 容器网络内访问 web 服务；可用 BASE_URL 覆盖
+      BASE_URL: ${BASE_URL:-http://web:80}
+    volumes:
+      - ./:/app
+      - verify_node_modules:/app/node_modules
+      - verify_playwright_cache:/ms-playwright
+    # 基础镜像已预装匹配版本的 Chromium（/ms-playwright 由命名卷在首次创建时从镜像初始化）
+    command: >
+      sh -c "npm ci --no-audit --no-fund &&
+             npx playwright test"
+
+volumes:
+  verify_node_modules:
+  verify_playwright_cache:
