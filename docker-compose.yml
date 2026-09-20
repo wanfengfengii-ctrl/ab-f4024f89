@@ -1,0 +1,36 @@
+# 精密双轴脉冲平台程序综合器 —— 纯前端，无业务后端
+#
+#   HOST_PORT=9090 docker compose up -d --build   # 指定宿主机端口（默认 8080）
+#   docker compose run --rm verify               # 执行浏览器验收（Playwright/Chromium）
+#   docker compose ps                            # 查看健康状态
+services:
+  web:
+    build:
+      context: .
+      target: runtime
+    image: dual-axis-pulse-planner:web
+    container_name: dual-axis-pulse-web
+    ports:
+      # 宿主机端口可配置：在 .env 或环境中设置 HOST_PORT，容器内固定 80
+      - "${HOST_PORT:-8080}:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  verify:
+    build:
+      context: .
+      target: verify
+    image: dual-axis-pulse-planner:verify
+    container_name: dual-axis-pulse-verify
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      BASE_URL: http://web:80
+    profiles:
+      - verify
